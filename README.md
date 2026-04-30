@@ -15,4 +15,4 @@ Under the same folder, the tcp server file is found inside 'Microphone_PDM-main/
 store bird call data.
 
 To run the server, simply type:
-	´node server.js --rate 16000 --bits 16´
+	``` node server.js --rate 16000 --bits 16 ```
