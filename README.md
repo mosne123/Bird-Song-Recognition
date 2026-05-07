@@ -16,3 +16,5 @@ store bird call data.
 
 To run the server, simply type:
 	``` node server.js --rate 16000 --bits 16 ```
+
+Both the PC and Photon2 need to be on the same network and the IP address in the cpp src file needs to match the PC's designated IP.
