@@ -20,10 +20,13 @@ int samples_collected = 0;
 unsigned long recordingStart;
 
 const char *class_names[] = {
-    "NONE",  // Class 0
-    "ROOK",  // Class 1
+    "Graaspurv",  // Class 0
+    "Haettemaage",  // Class 1
     "Krage", // Class 2
-    "Ugle"   // Class 3
+    "Raage",   // Class 3
+    "Solsort",
+    "Unknown"
+
 };
 
 SYSTEM_THREAD(ENABLED);
@@ -35,8 +38,7 @@ SerialLogHandler logHandler(LOG_LEVEL_INFO);
 // FFT instance
 // arm_rfft_instance_q15 S;
 typedef float float32_t;
-int16_t *mic_buffer;
-
+int16_t mic_buffer[ACTUAL_AUDIO_SAMPLES];
 int class_id;
 // If you don't hit the setup button to stop recording, this is how long to go before turning it
 // off automatically. The limit really is only the disk space available to receive the file.
@@ -49,7 +51,7 @@ enum State
   STATE_RUNNING,
   STATE_FINISH
 };
-State state = STATE_WAITING;
+State state = STATE_RUNNING;
 
 bool buffer_ready = false;
 void setup()
@@ -114,8 +116,9 @@ void loop()
             {
                 buffer_ready = true; // Lock buffer and signal the main loop
             }
+          }
         }
-    } });
+    } );
 
     if (buffer_ready)
     {
@@ -135,20 +138,21 @@ void loop()
       {
         Serial.printf("Confirmed Detection: %s\n", class_names[class_id]);
       }
-      // Serial.printf("Detected Class ID: %d\n", class_id);
-      Serial.println("500 MS sound samples With FFT 8196 Float");
-      Serial.println(millis() - recordingStart);
+      //Serial.printf("Detected Class ID: %d\n", class_id);
+      //Serial.println("500 MS sound samples With FFT 8196 Float");
+     // Serial.println(millis() - recordingStart);
       free(float_audio_clip);
       if (millis() - recordingStart >= MAX_RECORDING_LENGTH_MS)
       {
         state = STATE_FINISH;
       }
-      break;
+     
       }
+       break;
     case STATE_FINISH:
 
-      Log.info("stopping");
-      state = STATE_WAITING;
+      //Log.info("stopping");
+      state = STATE_RUNNING;
       break;
 
     default:

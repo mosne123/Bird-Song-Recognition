@@ -1,17 +1,24 @@
+#define EMLEARN_FEATURES_FLOAT 1
 
-#include <features.hpp>
+#include "Particle.h"
+#include "features.hpp"
 #include <math.h>
 #include <stdlib.h>
-Complex *twiddle_rfft = NULL;
+
+// Make sure this name exactly matches your generated emlearn header file!
+#include "Bird_recog_model.h" 
+
 CascadedHPF hpf;
+Complex *twiddle_rfft = NULL;
+
 int compare_floats(const void *a, const void *b)
 {
     float fa = *(const float *)a;
     float fb = *(const float *)b;
     return (fa > fb) - (fa < fb);
 }
+
 void hpf_init(void) {
-    // Initialize your coefficients (replace with your exact Python design values if needed)
     hpf.b0_0 = 1.0f;  hpf.b1_0 = -2.0f; hpf.b2_0 = 1.0f;
     hpf.a1_0 = -1.9f; hpf.a2_0 = 0.95f;
     hpf.x1_0 = 0.0f;  hpf.x2_0 = 0.0f;  hpf.y1_0 = 0.0f; hpf.y2_0 = 0.0f;
@@ -22,13 +29,11 @@ void hpf_init(void) {
 }
 
 float hpf_process(float input) {
-    // Stage 1
     float vn_0 = input - hpf.a1_0 * hpf.x1_0 - hpf.a2_0 * hpf.x2_0;
     float out_0 = hpf.b0_0 * vn_0 + hpf.b1_0 * hpf.x1_0 + hpf.b2_0 * hpf.x2_0;
     hpf.x2_0 = hpf.x1_0;
     hpf.x1_0 = vn_0;
 
-    // Stage 2
     float vn_1 = out_0 - hpf.a1_1 * hpf.x1_1 - hpf.a2_1 * hpf.x2_1;
     float out_1 = hpf.b0_1 * vn_1 + hpf.b1_1 * hpf.x1_1 + hpf.b2_1 * hpf.x2_1;
     hpf.x2_1 = hpf.x1_1;
@@ -36,10 +41,10 @@ float hpf_process(float input) {
 
     return out_1;
 }
+
 void fft_init()
 {
     twiddle_rfft = (Complex *)malloc((FFT_SIZE / 2) * sizeof(Complex));
-    
     if (twiddle_rfft != NULL) {
         for (int i = 0; i < FFT_SIZE / 2; i++)
         {
@@ -56,7 +61,6 @@ void bit_reversal_shuffle(Complex *data, int n)
     {
         if (i < j)
         {
-            // Swap data[i] and data[j]
             Complex temp = data[i];
             data[i] = data[j];
             data[j] = temp;
@@ -70,6 +74,7 @@ void bit_reversal_shuffle(Complex *data, int n)
         j += m;
     }
 }
+
 void cfft_core(Complex *data, int n)
 {
     bit_reversal_shuffle(data, n);
@@ -104,11 +109,10 @@ void rfft_split(Complex *data, int n)
 {
     int count = n / 2;
 
-    // Handle the DC and Nyquist bins
     float r0 = data[0].real;
     float i0 = data[0].imag;
-    data[0].real = r0 + i0; // DC component
-    data[0].imag = r0 - i0; // Nyquist component (stored in data[0].imag)
+    data[0].real = r0 + i0;
+    data[0].imag = r0 - i0;
 
     for (int i = 1; i <= count / 2; i++)
     {
@@ -117,7 +121,6 @@ void rfft_split(Complex *data, int n)
         Complex t1 = data[i];
         Complex t2 = data[j];
 
-        // Separate the two interleaved spectra
         Complex even, odd;
         even.real = 0.5f * (t1.real + t2.real);
         even.imag = 0.5f * (t1.imag - t2.imag);
@@ -125,12 +128,10 @@ void rfft_split(Complex *data, int n)
         odd.real = 0.5f * (t1.imag + t2.imag);
         odd.imag = -0.5f * (t1.real - t2.real);
 
-        // Multiply 'odd' by the RFFT twiddle factors
         Complex w = twiddle_rfft[i];
         float r_twid = odd.real * w.real - odd.imag * w.imag;
         float i_twid = odd.real * w.imag + odd.imag * w.real;
 
-        // Reconstruct the actual frequency spectrum
         data[i].real = even.real + r_twid;
         data[i].imag = even.imag + i_twid;
 
@@ -139,103 +140,73 @@ void rfft_split(Complex *data, int n)
     }
 }
 
+// Fixed to only extract features active in Python script
 TimeFeatures extract_time_features(float *clip, int len)
 {
     TimeFeatures tf;
-
-    // 1. Min, Max, Mean, RMS, and ZCR (Single Pass)
-    float sum = 0.0f;
     float abs_sum = 0.0f;
-    float sq_sum = 0.0f;
-    tf.min = clip[0];
-    tf.max = clip[0];
-    int zero_crossings = 0;
     int peaks = 0;
 
     for (int i = 0; i < len; i++)
     {
-        sum += clip[i];
         abs_sum += fabsf(clip[i]);
-        sq_sum += clip[i] * clip[i];
 
-        if (clip[i] < tf.min)
-            tf.min = clip[i];
-        if (clip[i] > tf.max)
-            tf.max = clip[i];
-
-        // Zero Crossing Rate calculation
-        if (i > 0)
+        if (i > 0 && i < len - 1)
         {
-            // Check if sign changed
-            if ((clip[i] >= 0 && clip[i - 1] < 0) || (clip[i] < 0 && clip[i - 1] >= 0))
-            {
-                zero_crossings++;
-            }
-
-            // Simple Peak Find (local maxima)
-            if (i < len - 1 && clip[i] > clip[i - 1] && clip[i] > clip[i + 1] && clip[i] > 0.0f)
+            if (clip[i] > clip[i - 1] && clip[i] > clip[i + 1])
             {
                 peaks++;
             }
         }
     }
 
-    tf.mean = abs_sum / len;
-    float true_mean = sum / len;
-    tf.rms = sqrtf(sq_sum / len);
-    tf.ptp = tf.max - tf.min;
-    tf.max_mean = tf.max / tf.mean;
-    tf.zcr = (float)zero_crossings / (len - 1); // normalized ZCR
+    tf.mean = abs_sum / len; // Equivalent to Python's np.mean(abs(clip))
     tf.peak_count = (float)peaks;
 
-    // 2. Variance, Standard Deviation, Skewness, and Kurtosis (Second Pass)
-    float var_sum = 0.0f;
-    float skew_sum = 0.0f;
-    float kurt_sum = 0.0f;
-    for (int i = 0; i < len; i++)
-    {
-        float diff = clip[i] - true_mean;
-        float diff_sq = diff * diff;
-        var_sum += diff_sq;
-        skew_sum += diff_sq * diff;
-        kurt_sum += diff_sq * diff_sq;
+    float *sorted_clip = (float *)malloc(len * sizeof(float));
+    if (sorted_clip != NULL) {
+        for (int i = 0; i < len; i++) sorted_clip[i] = clip[i];
+        qsort(sorted_clip, len, sizeof(float), compare_floats);
+
+        // Explicitly matches Python's np.percentile bounds
+        float p75 = sorted_clip[(int)(len * 0.75f)];
+        float p25 = sorted_clip[(int)(len * 0.25f)];
+        tf.iqr = p75 - p25;
+        
+        free(sorted_clip);
+    } else {
+        tf.iqr = 0.0f;
     }
-    float variance = var_sum / len;
-    tf.std = sqrtf(variance);
-
-    // Skewness and Kurtosis standard formulations
-    tf.skew = (skew_sum / len) / powf(tf.std, 3.0f);
-    tf.kurtosis = ((kurt_sum / len) / powf(tf.std, 4.0f)) - 3.0f; // excess kurtosis
-
-    // 3. Median, IQR, and MAD (Requires Sorting)
-    // Create a temporary static copy of the array so we don't mess up the original or overflow stack
-    static float sorted_clip[8192];
-    for (int i = 0; i < len; i++)
-        sorted_clip[i] = clip[i];
-    qsort(sorted_clip, len, sizeof(float), compare_floats);
-
-    float median = sorted_clip[len / 2];
-    tf.iqr = sorted_clip[(int)(len * 0.75f)] - sorted_clip[(int)(len * 0.25f)];
-
-    // Calculate MAD: median(abs(clip - median))
-    static float mad_array[8192];
-    for (int i = 0; i < len; i++)
-    {
-        mad_array[i] = fabsf(clip[i] - median);
-    }
-    qsort(mad_array, len, sizeof(float), compare_floats);
-    tf.mad = mad_array[len / 2];
 
     return tf;
 }
 
 int process_signal_for_emlearn(float *my_raw_data)
 {
-    // Allocate the complex buffer on the stack (grows/shrinks dynamically)
-    // or keep static if stack size is constrained, but let's drop filtered_audio!
     Complex *fft_buffer = (Complex *)malloc(CFFT_SIZE * sizeof(Complex));
+    float *magnitude_spectrum = (float *)malloc(CFFT_SIZE * sizeof(float));
     float *master_feature_vector = (float *)malloc(TOTAL_FEATURES_COUNT * sizeof(float));
-    // 1. In-place HPF processing to avoid creating a massive 'filtered_audio' array
+    
+    if (!fft_buffer || !magnitude_spectrum || !master_feature_vector) {
+        if (fft_buffer) free(fft_buffer);
+        if (magnitude_spectrum) free(magnitude_spectrum);
+        if (master_feature_vector) free(master_feature_vector);
+        return -1;
+    }
+
+    // 1. Audio clip level normalization to match Python preprocessing
+    float max_val = 0.0f;
+    for (int i = 0; i < ACTUAL_AUDIO_SAMPLES; i++) {
+        float abs_v = fabsf(my_raw_data[i]);
+        if (abs_v > max_val) max_val = abs_v;
+    }
+    if (max_val > 0.0f) {
+        for (int i = 0; i < ACTUAL_AUDIO_SAMPLES; i++) {
+            my_raw_data[i] = my_raw_data[i] / max_val;
+        }
+    }
+
+    // 2. High-Pass Filtering & FFT Buffer Packing
     for (int i = 0; i < CFFT_SIZE; i++)
     {
         int even_idx = 2 * i;
@@ -243,71 +214,122 @@ int process_signal_for_emlearn(float *my_raw_data)
 
         if (even_idx < ACTUAL_AUDIO_SAMPLES)
         {
-            // Modify my_raw_data directly in place!
             my_raw_data[even_idx] = hpf_process(my_raw_data[even_idx]);
             fft_buffer[i].real = my_raw_data[even_idx];
         }
-        else
-        {
-            fft_buffer[i].real = 0.0f;
-        }
+        else fft_buffer[i].real = 0.0f;
 
         if (odd_idx < ACTUAL_AUDIO_SAMPLES)
         {
             my_raw_data[odd_idx] = hpf_process(my_raw_data[odd_idx]);
             fft_buffer[i].imag = my_raw_data[odd_idx];
         }
-        else
-        {
-            fft_buffer[i].imag = 0.0f;
-        }
+        else fft_buffer[i].imag = 0.0f;
     }
 
-    // 2. Run the RFFT pipeline
     cfft_core(fft_buffer, CFFT_SIZE);
     rfft_split(fft_buffer, CFFT_SIZE);
 
-    // 3. Extract Frequency magnitudes
-    master_feature_vector[0] = fabsf(fft_buffer[0].real);
-    master_feature_vector[CFFT_SIZE] = fabsf(fft_buffer[0].imag);
-
+    // 3. Absolute Magnitude Spectrum Generation (Matches Python: np.abs(np.fft.rfft))
+    magnitude_spectrum[0] = fabsf(fft_buffer[0].real);
     for (int i = 1; i < CFFT_SIZE; i++)
     {
         float r = fft_buffer[i].real;
         float j = fft_buffer[i].imag;
-        master_feature_vector[i] = sqrtf(r * r + j * j);
+        magnitude_spectrum[i] = sqrtf(r * r + j * j);
     }
 
-    // 4. Pass the already-filtered raw_data array directly to time features!
-    // This saves us an entire 32KB array allocation.
+    // 4. Calculate Time Features
     TimeFeatures tf = extract_time_features(my_raw_data, ACTUAL_AUDIO_SAMPLES);
 
-    // 5. Populate feature vector (Index 4097+)
-    int idx = 4097;
-    master_feature_vector[idx++] = tf.mean;
-    master_feature_vector[idx++] = tf.std;
-    master_feature_vector[idx++] = tf.min;
-    master_feature_vector[idx++] = tf.max;
-    master_feature_vector[idx++] = tf.ptp;
-    master_feature_vector[idx++] = tf.mad;
-    master_feature_vector[idx++] = tf.iqr;
-    master_feature_vector[idx++] = tf.max_mean;
-    master_feature_vector[idx++] = tf.rms;
-    master_feature_vector[idx++] = tf.zcr;
-    master_feature_vector[idx++] = tf.peak_count;
-    master_feature_vector[idx++] = tf.skew;
-    master_feature_vector[idx++] = tf.kurtosis;
+    // 5. Calculate Spectral Centroid
+    float sum_magnitude = 0.0f;
+    float sum_weighted_freq = 0.0f;
+    float bin_resolution = 16000.0f / (float)FFT_SIZE;
 
-    // 6. ML Prediction Logic
-    float confidence_threshold = 0.70f;
-    float probabilities[4] = {0.0f};
-    int class_id; // = my_emlearn_model_predict_proba(master_feature_vector, TOTAL_FEATURES_COUNT, probabilities, 4);
-    free(fft_buffer);
-    free(master_feature_vector);
-    if (probabilities[class_id] >= confidence_threshold)
+    for (int i = 0; i < CFFT_SIZE; i++)
     {
-        if (class_id >= 0 && class_id < 4)
-            return class_id;
+        float freq = (float)i * bin_resolution;
+        sum_weighted_freq += freq * magnitude_spectrum[i];
+        sum_magnitude += magnitude_spectrum[i];
     }
+    float spectral_centroid = (sum_magnitude > 0.0f) ? (sum_weighted_freq / sum_magnitude) : 0.0f;
+
+    // 6. Calculate Spectral Entropy
+    float entropy = 0.0f;
+    if (sum_magnitude > 0.0f) {
+        for (int i = 0; i < CFFT_SIZE; i++) {
+            float psd = magnitude_spectrum[i] / sum_magnitude;
+            entropy -= psd * log2f(psd + 1e-10f);
+        }
+    }
+
+    // 7. Synchronize Columns directly to the Master Feature Vector
+    // Order must match Python Dataframe layout perfectly!
+    int idx = 0;
+    master_feature_vector[idx++] = tf.mean;          // Column 1: ABS_mean
+    master_feature_vector[idx++] = tf.iqr;           // Column 2: IQR
+    master_feature_vector[idx++] = tf.peak_count;    // Column 3: peak_count
+    master_feature_vector[idx++] = spectral_centroid;// Column 4: spectral_centroid
+
+    // Column 5-12: Band Energies (Using absolute magnitude squared inside bands)
+    float bands_def[8][2] = {
+        {0, 500}, {500, 1000}, {1000, 1500}, {1500, 2000},
+        {2000, 3000}, {3000, 4000}, {4000, 6000}, {6000, 8000}
+    };
+
+    for (int b = 0; b < 8; b++) {
+        int start_bin = (int)(bands_def[b][0] / bin_resolution);
+        int end_bin = (int)(bands_def[b][1] / bin_resolution);
+        if (end_bin > CFFT_SIZE) end_bin = CFFT_SIZE;
+
+        float band_energy = 0.0f;
+        for (int i = start_bin; i < end_bin; i++) {
+            band_energy += magnitude_spectrum[i] * magnitude_spectrum[i];
+        }
+        master_feature_vector[idx++] = band_energy;
+    }
+
+    master_feature_vector[idx++] = entropy;          // Column 13: spectral_entropy
+
+    // 8. Telemetry Inspection Debugging
+    Serial.println("\n=== REAL TINYML SYNCED TELEMETRY ===");
+    Serial.printf("ABS_mean: %f | IQR: %f | Peaks: %f\n", master_feature_vector[0], master_feature_vector[1], master_feature_vector[2]);
+    Serial.printf("Centroid: %f | Entropy: %f\n", master_feature_vector[3], master_feature_vector[12]);
+    Serial.printf("Band 0-500Hz Energy: %f\n", master_feature_vector[4]);
+    Serial.printf("Band 3k-4kHz Energy: %f\n", master_feature_vector[9]);
+    Serial.println("====================================");
+
+    free(fft_buffer);
+    free(magnitude_spectrum);
+
+    // 9. ML Execution Logic
+    float confidence_threshold = 0.30f;
+    float probabilities[6] = {0.0f};
+    
+    int class_id = Bird_recog_model_predict_proba(master_feature_vector, 6, probabilities, 6);
+    free(master_feature_vector); 
+
+   int winner_class_id = 0;
+    float max_prob = probabilities[0];
+    
+    for (int i = 1; i < 6; i++) {
+        if (probabilities[i] > max_prob) {
+            max_prob = probabilities[i];
+            winner_class_id = i;
+        }
+    }
+
+    Serial.print("Class Probabilities -> ");
+    for(int i = 0; i < 6; i++) {
+        Serial.printf("[%d]: %.4f ", i, probabilities[i]);
+    }
+    Serial.printf("\nActual Highest Class ID: %d (Prob: %.4f)\n", winner_class_id, max_prob);
+
+    // Threshold evaluation based on the true maximum probability
+    if (max_prob >= confidence_threshold) {
+        return winner_class_id;
+    }
+    
     return -1;
 }
