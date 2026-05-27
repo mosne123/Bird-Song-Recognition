@@ -25,6 +25,7 @@
 // #include "ameba_soc.h"
 #include "rl6548.h"
 #include "rl6548_eq_table.h"
+
 /**
   * @brief  Enables or disables the specified AUDIO SI peripheral.
   * @param  new_state: new state of the SIx peripheral.

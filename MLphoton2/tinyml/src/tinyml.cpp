@@ -7,17 +7,24 @@
  */
 
 // Include Particle Device OS APIs
-// #include "Particle.h"
 
 #ifndef __FPU_PRESENT
 #define __FPU_PRESENT 1
 #endif
-#include "arm_math.h"
-#include "Microphone_PDM.h"
 
-#define FFT_SIZE 8192 // POWER OF 2!!! 16KHZ/500MS = 8K SAMPLES 0 PAD REST
+#include "Microphone_PDM.h"
+#include "features.hpp"
+// #include "Particle.h"
+
 int samples_collected = 0;
 unsigned long recordingStart;
+
+const char *class_names[] = {
+    "NONE",  // Class 0
+    "ROOK",  // Class 1
+    "Krage", // Class 2
+    "Ugle"   // Class 3
+};
 
 SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
@@ -25,18 +32,15 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 // Show system, cloud connectivity, and application logs over USB
 // View logs with CLI using 'particle serial monitor --follow'
 SerialLogHandler logHandler(LOG_LEVEL_INFO);
-
 // FFT instance
-//arm_rfft_instance_q15 S;
-arm_rfft_fast_instance_f32 S;
+// arm_rfft_instance_q15 S;
+typedef float float32_t;
+int16_t *mic_buffer;
 
-int16_t mic_buffer[FFT_SIZE];
-float32_t fft_input[FFT_SIZE];     // The "f32" version for math
-float32_t fft_output[FFT_SIZE * 2]; // Result buffer (Complex: Real + Imag)
-float32_t mag_buf[FFT_SIZE / 2];
+int class_id;
 // If you don't hit the setup button to stop recording, this is how long to go before turning it
 // off automatically. The limit really is only the disk space available to receive the file.
-const unsigned long MAX_RECORDING_LENGTH_MS = 30000;
+const unsigned long MAX_RECORDING_LENGTH_MS = 500;
 
 enum State
 {
@@ -46,18 +50,20 @@ enum State
   STATE_FINISH
 };
 State state = STATE_WAITING;
-// setup() runs once, when the device is first turned on
+
+bool buffer_ready = false;
 void setup()
 {
-
+  hpf_init();
+  fft_init();
+  uint32_t mem = System.freeMemory();
   Particle.connect();
   Serial.begin(); // Ensure Serial is initialized
                   // Register handler to handle clicking on the SETUP button
+  //
+  Serial.println("Free memory at start up");
+  Serial.println(mem);
 
-  // spawn fft
-  arm_rfft_fast_init_f32(&S, FFT_SIZE);
-
-  // buffer for audio sampled
   // PDM Mic instance
 
   int err = Microphone_PDM::instance()
@@ -89,47 +95,64 @@ void loop()
     break;
 
   case STATE_RUNNING:
-
+    {
     recordingStart = millis();
 
     Microphone_PDM::instance().noCopySamples([](void *pSamples, size_t numSamples)
-                                             {int16_t *incomingData = (int16_t *)pSamples;
-                                            size_t count = Microphone_PDM::instance().getBufferSizeInBytes() / 2;
+                                             {
+    int16_t *incomingData = (int16_t *)pSamples;
 
-    for (size_t i = 0; i < count; i++) {
-        if (samples_collected < FFT_SIZE) {
+    // USE numSamples INSTEAD OF WALKING THE WHOLE HARDWARE BUFFER
+    for (size_t i = 0; i < numSamples; i++) 
+    {
+        if (!buffer_ready && samples_collected < ACTUAL_AUDIO_SAMPLES) 
+        { 
             mic_buffer[samples_collected] = incomingData[i];
             samples_collected++;
+
+            if (samples_collected >= ACTUAL_AUDIO_SAMPLES) 
+            {
+                buffer_ready = true; // Lock buffer and signal the main loop
+            }
         }
-      } });
+    } });
 
-      arm_q15_to_float((q15_t*)mic_buffer,fft_input,0)
-    if (samples_collected == FFT_SIZE)
+    if (buffer_ready)
     {
-      arm_rfft_fast_f32(&S, fft_input, fft_output, 0);
-      arm_cmplx_mag_f32(fft_output, mag_buf, FFT_SIZE / 2);
-      
+      float *float_audio_clip = (float *)malloc(ACTUAL_AUDIO_SAMPLES * sizeof(float));
+      // Convert raw int16_t audio (-32768 to 32767) to normalized float (-1.0 to 1.0)
+      for (int i = 0; i < ACTUAL_AUDIO_SAMPLES; i++)
+      {
+        float_audio_clip[i] = (float)mic_buffer[i] / 32768.0f;
+      }
+
+      // Reset tracking variables to start recording the next 500ms window
+      samples_collected = 0;
+      buffer_ready = false;
+
+      class_id = process_signal_for_emlearn(float_audio_clip);
+      if (class_id >= 0)
+      {
+        Serial.printf("Confirmed Detection: %s\n", class_names[class_id]);
+      }
+      // Serial.printf("Detected Class ID: %d\n", class_id);
+      Serial.println("500 MS sound samples With FFT 8196 Float");
+      Serial.println(millis() - recordingStart);
+      free(float_audio_clip);
+      if (millis() - recordingStart >= MAX_RECORDING_LENGTH_MS)
+      {
+        state = STATE_FINISH;
+      }
+      break;
+      }
+    case STATE_FINISH:
+
+      Log.info("stopping");
+      state = STATE_WAITING;
+      break;
+
+    default:
+      break;
     }
-
-    Serial.println("500 MS sound samples With FFT 1024 F32");
-    Serial.println(millis() - recordingStart);
-    if (millis() - recordingStart >= MAX_RECORDING_LENGTH_MS)
-    {
-      state = STATE_FINISH;
-    }
-    break;
-  case STATE_FINISH:
-
-    Log.info("stopping");
-    state = STATE_WAITING;
-    break;
-
-  default:
-    break;
   }
-
-  // Example: Publish event to cloud every 10 seconds. Uncomment the next 3 lines to try it!
-  // Log.info("Sending Hello World to the cloud!");
-  // Particle.publish("Hello world!");
-  // delay( 10 * 1000 ); // milliseconds and blocking - see docs for more info!
 }
