@@ -265,7 +265,7 @@ int process_signal_for_emlearn(float *my_raw_data)
     }
 
     // 7. Synchronize Columns directly to the Master Feature Vector
-    // Order must match Python Dataframe layout perfectly!
+    
     int idx = 0;
     master_feature_vector[idx++] = tf.mean;          // Column 1: ABS_mean
     master_feature_vector[idx++] = tf.iqr;           // Column 2: IQR
@@ -307,7 +307,9 @@ int process_signal_for_emlearn(float *my_raw_data)
     float confidence_threshold = 0.30f;
     float probabilities[6] = {0.0f};
     
-    int class_id = Bird_recog_model_predict_proba(master_feature_vector, 6, probabilities, 6);
+
+    //WARNING!!!! 1. 6 tal er feature længde. men det er da 13 og ikke 6?!?!
+    int class_id = Bird_recog_model_predict_proba(master_feature_vector, 13, probabilities, 6);
     free(master_feature_vector); 
 
    int winner_class_id = 0;
