@@ -46,10 +46,6 @@ plt.show()
 
 # reduce number of fft bins
 n_fft = 8000
-
-# fft_field = np.fft.rfft(audio_field)
-# freqs_field = np.fft.rfftfreq(len(audio_field), d=1/sr_field)
-
 fft_field = np.fft.rfft(audio_field, n=n_fft)
 freqs_field = np.fft.rfftfreq(n_fft, d=1/sr_field)
 
@@ -77,9 +73,6 @@ plt.show()
 fft_aarhus = np.fft.rfft(audio_aarhus)
 freqs_aarhus = np.fft.rfftfreq(len(audio_aarhus), d=1/sr_field)
 
-# fft_aarhus = np.fft.rfft(audio_aarhus, n_fft)
-# freqs_aarhus = np.fft.rfftfreq(n_fft, d=1/sr_aarhus)
-
 plt.plot(freqs_aarhus, np.abs(fft_aarhus))
 plt.xlabel("Frequency (Hz)")
 plt.ylabel("Magnitude")
@@ -99,18 +92,11 @@ for i in range(len(X_audio)):
 
     clip = X_audio[i]
 
-    # #Notch filter
-    for f in [50, 60]:
-        b, a = iirnotch(f, 30, sr)
-        clip = filtfilt(b, a, clip)
-
-    # # HP-filter
-    # b, a = butter(4, 100/(sr/2), btype='high')
-    # clip = filtfilt(b, a, clip)
+    # HP-filter
+    b, a = butter(2, 100/(sr/2), btype='high')
+    clip = filtfilt(b, a, clip)
 
     X_audio[i] = clip
-
-X_audio = X_audio_load.copy()
 
 # # Normalize each clip individually
 for i in range(len(X_audio)):
@@ -167,34 +153,11 @@ bands = [
 def extract_features(clip, sr=16000):  # adjust sr if needed
     
     features = {}
-
-    # Time domain features
+    # Time domain features 
     features["ABS_mean"] = np.mean(abs(clip))
-    #features["std"] = np.std(clip)
-    # features["min"] = np.min(clip)
-    # features["max"] = np.max(clip)
-    # features["ptp"] = np.max(clip)- np.min(clip)
-    # features["median"] = np.median(clip)
-    # features["mad"] = np.median(np.abs(clip - np.median(clip)))
     features["IQR"] = np.percentile(clip, 75) - np.percentile(clip, 25)
-    # features["max_mean"] = np.max(clip)/features["ABS_mean"]
-    # RMS
-    # features["rms"] = np.sqrt(np.sum(clip**2) / len(clip)) 
-
-    # Zero crossing rate
-    # features["zcr"] = np.mean(np.abs(np.diff(np.sign(clip))))
-
-    # Peak count
     features["peak_count"] = len(find_peaks(clip)[0])
 
-    # Shape
-    # features["skew"] = stats.skew(clip)
-    # features["kurtosis"] = stats.kurtosis(clip)
-
-
-    # n_fft = 1048
-    # spectrum = np.abs(np.fft.rfft(np.clip(clip, -1, 1), n=n_fft))
-    # freqs = np.fft.rfftfreq(n_fft, d=1/sr)
     # Frequency domain features
     spectrum = np.abs(np.fft.rfft(clip))
     freqs = np.fft.rfftfreq(len(clip), d=1/sr)
@@ -228,10 +191,6 @@ for i, clip in enumerate(X_audio):
     feature_list.append(feats)
 
 df_features = pd.DataFrame(feature_list)
-
-# number of each class
-# print(df_features["label"].value_counts())
-# print(df_features.head())
 print("\n")
 
 # Print one feature example per class
@@ -251,24 +210,18 @@ for label in df_features["label"].unique():
 
 
 # ML random forrest
-
 X= df_features.drop("label", axis=1)
 y = df_features["label"]
-
-# print("Feature columns:", X.columns)
-# print("Number of features:", X.shape[1])
-# print(y)
 
 # Encode labels
 
 le = LabelEncoder()
 y_encoded = le.fit_transform(y)
 
-
 X_train, X_test, y_train, y_test = train_test_split(
     X, y_encoded,
     test_size=0.2,
-    random_state=40, #42
+    random_state=42, #42
     stratify=y_encoded
 )
 
@@ -282,9 +235,6 @@ y_pred = rf.predict(X_test)
 
 # Test scoring 
 print("Test accuracy:", accuracy_score(y_test, y_pred))
-print("\nClassification Report:\n")
-print(classification_report(y_test, y_pred, target_names=le.classes_))
-# make 80-20 train test split where the train and test set contain some of all classes
 
 cv_scores = cross_val_score(rf, X_train, y_train, cv=5)
 print("CV scores:", cv_scores)
@@ -322,16 +272,16 @@ test_acc = []
 
 for n in n_trees:
 
-    rf = RandomForestClassifier(
+    rf_md = RandomForestClassifier(
         n_estimators=n,
         max_depth=5,      # fixed depth
         random_state=42
     )
 
-    rf.fit(X_train, y_train)
+    rf_md.fit(X_train, y_train)
 
-    y_train_pred = rf.predict(X_train)
-    y_test_pred = rf.predict(X_test)
+    y_train_pred = rf_md.predict(X_train)
+    y_test_pred = rf_md.predict(X_test)
 
     train_acc.append(
         accuracy_score(y_train, y_train_pred)
@@ -384,17 +334,17 @@ test_acc = []
 
 for d in depths:
 
-    rf = RandomForestClassifier(
+    rf_nt = RandomForestClassifier(
         n_estimators=200,
         max_depth=d,
         random_state=42
     )
 
-    rf.fit(X_train, y_train)
+    rf_nt.fit(X_train, y_train)
 
     # Predictions
-    y_train_pred = rf.predict(X_train)
-    y_test_pred = rf.predict(X_test)
+    y_train_pred = rf_nt.predict(X_train)
+    y_test_pred = rf_nt.predict(X_test)
 
     # Accuracies
     train_acc.append(
@@ -431,6 +381,9 @@ plt.grid(True)
 plt.legend()
 
 plt.show()
+
+#%% svm model and test 
+
 
 
 
