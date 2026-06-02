@@ -16,10 +16,11 @@ from scipy.signal import iirnotch, filtfilt, butter
 
 # data = np.load("C:\\Users\\Bruger\\OneDrive - Aarhus universitet\\Dokumenter\\UNI\\10. Semester\\TinyML\\Fuglelyde\\bird_dataset_5.npy", allow_pickle=True)
 data = np.load("C:\\Users\\Bruger\\OneDrive - Aarhus universitet\\Dokumenter\\UNI\\10. Semester\\TinyML\\Bird_recog\\Bird-Song-Recognition\\Bird_ML_develop\\\\bird_dataset_5.npy", allow_pickle=True)
+data = np.load("Location of file", allow_pickle=True)
 print(data.shape)
-y = data[:, 0]                  # labels
-X_audio_load = data[:, 1:].astype(float)   # audio clips
-sr = 16000  # sample rate
+y = data[:, 0]             
+X_audio_load = data[:, 1:].astype(float)   
+fs = 16000  
 
 
 # number of each class
@@ -31,8 +32,8 @@ for cls, count in class_counts.items():
 
 #%% load wav file and plot signal and fft to check 50Hz noise
 
-audio_field, sr_field = sf.read("C:\\Users\\Bruger\\OneDrive - Aarhus universitet\\Dokumenter\\UNI\\10. Semester\\TinyML\\TinyML_sampler\\Microphone_PDM-main\\server\\Unknown_vind.wav")
-t_axis_field = np.arange(len(audio_field)) / sr_field
+audio_field, fs_field = sf.read("C:\\Users\\Bruger\\OneDrive - Aarhus universitet\\Dokumenter\\UNI\\10. Semester\\TinyML\\TinyML_sampler\\Microphone_PDM-main\\server\\Unknown_vind.wav")
+t_axis_field = np.arange(len(audio_field)) / fs_field
 audio_field = audio_field / np.max(np.abs(audio_field))
 
 
@@ -47,7 +48,7 @@ plt.show()
 # reduce number of fft bins
 n_fft = 8000
 fft_field = np.fft.rfft(audio_field, n=n_fft)
-freqs_field = np.fft.rfftfreq(n_fft, d=1/sr_field)
+freqs_field = np.fft.rfftfreq(n_fft, d=1/fs_field)
 
 
 plt.plot(freqs_field, np.abs(fft_field))
@@ -58,8 +59,8 @@ plt.xlim(0, 80)
 plt.grid()
 plt.show()
 
-audio_aarhus, sr_aarhus = sf.read("C:\\Users\\Bruger\\OneDrive - Aarhus universitet\\Dokumenter\\UNI\\10. Semester\\TinyML\\TinyML_sampler\\Microphone_PDM-main\\server\\out\\Unknown_ugle.wav")
-t_axis_aarhus = np.arange(len(audio_aarhus)) / sr_aarhus
+audio_aarhus, fs_aarhus = sf.read("C:\\Users\\Bruger\\OneDrive - Aarhus universitet\\Dokumenter\\UNI\\10. Semester\\TinyML\\TinyML_sampler\\Microphone_PDM-main\\server\\out\\Unknown_ugle.wav")
+t_axis_aarhus = np.arange(len(audio_aarhus)) / fs_aarhus
 audio_aarhus = audio_aarhus / np.max(np.abs(audio_aarhus))
 
 plt.plot(t_axis_aarhus, audio_aarhus)
@@ -71,7 +72,7 @@ plt.grid()
 plt.show()
 
 fft_aarhus = np.fft.rfft(audio_aarhus)
-freqs_aarhus = np.fft.rfftfreq(len(audio_aarhus), d=1/sr_field)
+freqs_aarhus = np.fft.rfftfreq(len(audio_aarhus), d=1/fs_field)
 
 plt.plot(freqs_aarhus, np.abs(fft_aarhus))
 plt.xlabel("Frequency (Hz)")
@@ -88,22 +89,23 @@ X_audio=X_audio_load.copy()
 n_fft = 8000  # resolution
 x_lim= 8000
 
+# Highpass fitler 
 for i in range(len(X_audio)):
 
     clip = X_audio[i]
 
     # HP-filter
-    b, a = butter(2, 100/(sr/2), btype='high')
+    b, a = butter(2, 100/(fs/2), btype='high')
     clip = filtfilt(b, a, clip)
 
     X_audio[i] = clip
 
-# # Normalize each clip individually
+# Normalize each clip individually
 for i in range(len(X_audio)):
 
     max_val = np.max(np.abs(X_audio[i]))
 
-    # Avoid divide-by-zero
+    # Avoid dividing with zero
     if max_val > 0:
         X_audio[i] = X_audio[i] / max_val   
 
@@ -119,7 +121,7 @@ for label in classes:
 
     # FFT
     spectrum = np.abs(np.fft.rfft(clip, n=n_fft))
-    freqs = np.fft.rfftfreq(n_fft, d=1/sr)
+    freqs = np.fft.rfftfreq(n_fft, d=1/fs)
 
     # Normalize (important for comparison)
     spectrum = spectrum / np.max(spectrum + 1e-10)
@@ -150,7 +152,7 @@ bands = [
     (6000, 8000)
 ]
 
-def extract_features(clip, sr=16000):  # adjust sr if needed
+def extract_features(clip, fs=16000):  # adjust fs if needed
     
     features = {}
     # Time domain features 
@@ -160,7 +162,7 @@ def extract_features(clip, sr=16000):  # adjust sr if needed
 
     # Frequency domain features
     spectrum = np.abs(np.fft.rfft(clip))
-    freqs = np.fft.rfftfreq(len(clip), d=1/sr)
+    freqs = np.fft.rfftfreq(len(clip), d=1/fs)
 
     if np.sum(spectrum) > 0:
         features["spectral_centroid"] = np.sum(freqs * spectrum) / np.sum(spectrum)
@@ -214,7 +216,6 @@ X= df_features.drop("label", axis=1)
 y = df_features["label"]
 
 # Encode labels
-
 le = LabelEncoder()
 y_encoded = le.fit_transform(y)
 
@@ -226,16 +227,17 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 
 rf = RandomForestClassifier( 
-    n_estimators=50, #50
-    max_depth=5, # 8
+    n_estimators=50, 
+    max_depth=5,
     random_state=42 
 )
+
+# Fitting
 rf.fit(X_train, y_train)
 y_pred = rf.predict(X_test)
-
 # Test scoring 
 print("Test accuracy:", accuracy_score(y_test, y_pred))
-
+# 5 fold CV
 cv_scores = cross_val_score(rf, X_train, y_train, cv=5)
 print("CV scores:", cv_scores)
 print("Mean CV accuracy:", np.mean(cv_scores))
@@ -445,23 +447,23 @@ plt.show()
 
 #%% EM learn export
 
-# 1. Convert
-import emlearn
 
+
+bird_names = le.inverse_transform(y_pred)
+
+
+import emlearn
 
 wrapper = emlearn.convert(rf, method='inline', dtype='float32')
 
-# 2. Get the C code string
-# The 'name' will be the prefix for your C functions
 c_code = wrapper.save(name='Bird_recog_model')
 
-# 3. Write to file
+
 with open('Bird_recog_model.h', 'w') as f:
     f.write(c_code)
 
-print("SUCCESS: Bird_recog_model.h is finally ready!")
+print("Generated Bird_recog_model.h ")
 
-# print number of lines in the generated C code
 with open('Bird_recog_model.h', 'r') as f:
     lines = f.readlines()
     print(f"Number of lines in Bird_recog_model.h: {len(lines)}")

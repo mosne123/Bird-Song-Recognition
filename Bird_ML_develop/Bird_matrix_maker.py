@@ -106,7 +106,7 @@ with open("bird_dataset_5.csv", "w") as f:
 
     df_raw.to_csv(f, index=False)
 
-print("Datasets saved!")
+print("Datasets saved")
 
 df_feat["peak_to_peak"] = df_feat["peak_to_peak"].astype(float)
 df_feat["variance"] = df_feat["variance"].astype(float)
