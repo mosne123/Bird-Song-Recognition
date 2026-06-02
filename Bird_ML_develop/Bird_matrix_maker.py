@@ -1,5 +1,5 @@
 
-# %% test 2
+#%% 
 import os
 import numpy as np
 import pandas as pd
@@ -16,7 +16,6 @@ peak_distance_sec = 0.4
 all_data = []
 features = []   
 
-# Loop through all wav files
 for file in os.listdir(folder_path):
     if file.endswith(".wav"):
 
@@ -39,57 +38,73 @@ for file in os.listdir(folder_path):
 
         peaks, _ = find_peaks(
             envelope,
-          height=adaptive_height,
-          distance=int(sr * peak_distance_sec)
+            height=adaptive_height,
+            distance=int(sr * peak_distance_sec)
         )
 
         clip_samples = int(sr * clip_duration)
 
-        print(file, "peaks:", len(peaks))  # ✅ DEBUG
+        if label.lower() == "unknown":
 
-        for peak in peaks:
-            start = max(0, peak - clip_samples // 2)
-            end = min(len(y), peak + clip_samples // 2)
+            for start in range(0, len(y) - clip_samples + 1, clip_samples):
+                end = start + clip_samples
+                clip = y[start:end]
 
-            clip = y[start:end]
+                row = np.concatenate(([label], clip))
+                all_data.append(row)
 
-            if len(clip) < clip_samples:
-                clip = np.pad(clip, (0, clip_samples - len(clip)))
+        else:
 
-            # -------- RAW DATA --------
-            row = np.concatenate(([label], clip))
-            all_data.append(row)
+            print(file, "peaks:", len(peaks)) 
 
-            # -------- FEATURES --------
-            peak_to_peak = np.max(clip) - np.min(clip)
-            variance = np.var(clip)
+            for peak in peaks:
+                
+                start = max(0, peak - clip_samples // 2)
+                end = min(len(y), peak + clip_samples // 2)
 
-            features.append({
-                "label": label,
-                "peak_to_peak": peak_to_peak,
-                "variance": variance
-            })
+                clip = y[start:end]
+
+                if len(clip) < clip_samples:
+                    clip = np.pad(clip, (0, clip_samples - len(clip)))
+
+                row = np.concatenate(([label], clip))
+                all_data.append(row)
+
+                peak_to_peak = np.max(clip) - np.min(clip)
+                variance = np.var(clip)
+
+                features.append({
+                    "label": label,
+                    "peak_to_peak": peak_to_peak,
+                    "variance": variance
+                })
 
 print("Total clips:", len(all_data))
 print("Total features:", len(features))
-# Print class distribution in features
+
 feature_labels = [f["label"] for f in features]
 unique, counts = np.unique(feature_labels, return_counts=True)
+
 print("Feature class distribution:")
 for label, count in zip(unique, counts):
     print(f"  {label}: {count}")    
-
-
 
 # RAW clips
 df_raw = pd.DataFrame(all_data)
 df_raw.to_csv("bird_dataset_5.csv", index=False)
 np.save("bird_dataset_5.npy", df_raw.values)
 
-# FEATURES
-df_feat = pd.DataFrame(features)
-df_feat.to_csv("bird_dataset_with_features_5.csv", index=False)
-np.save("bird_dataset_with_features_5.npy", df_feat.values)
+df_raw = pd.DataFrame(all_data)
+
+with open("bird_dataset_5.csv", "w") as f:
+
+    f.write("# Bird Song Dataset\n")
+    f.write("# Sample Rate: 16000 Hz\n")
+    f.write("# Resolution: 16 bit\n")
+    f.write("# Format: WAV\n")
+    f.write("\n")
+
+    df_raw.to_csv(f, index=False)
 
 print("Datasets saved!")
 
@@ -102,8 +117,6 @@ plt.xlabel("Peak-to-Peak")
 plt.ylabel("Variance")
 plt.title("Clip Feature Distribution")
 plt.show()
+
 print("Features plotted!")
-
-
-
 # %%
