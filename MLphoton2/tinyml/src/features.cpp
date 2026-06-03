@@ -309,6 +309,7 @@ int process_signal_for_emlearn(float *my_raw_data)
     
 
     //WARNING!!!! 1. 6 tal er feature længde. men det er da 13 og ikke 6?!?!
+    
     int class_id = Bird_recog_model_predict_proba(master_feature_vector, 13, probabilities, 6);
     free(master_feature_vector); 
 

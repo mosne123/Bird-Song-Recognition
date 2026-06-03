@@ -20,12 +20,12 @@ int samples_collected = 0;
 unsigned long recordingStart;
 
 const char *class_names[] = {
-    "Graaspurv",  // Class 0
-    "Haettemaage",  // Class 1
-    "Krage", // Class 2
-    "Raage",   // Class 3
-    "Solsort",
-    "Unknown"
+    "Crow",  // Class 0
+    "HoodedGull",  // Class 1
+    "HouseSparrow", // Class 2
+    "Rook",   // Class 3
+    "Unknown",
+    "Blackbird"
 
 };
 
